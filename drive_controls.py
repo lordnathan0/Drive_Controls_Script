@@ -7,6 +7,7 @@ Created on Tue Nov 11 16:14:19 2014
 
 from ctypes import *
 from threading import Thread
+import struct
 
 # For sleep()
 import time
@@ -79,7 +80,6 @@ def run_drive_controls(control_file):
     
     line = 0
     print controls_input[line,2]
-    KillSwitch = False  
     
     try:
         while line < len(controls_input[:,2]):
@@ -87,24 +87,55 @@ def run_drive_controls(control_file):
                 #Continue performing current test
                 print "RPM is ", controls_input[line,0]
                 print "Torque is ", controls_input[line,1]
+
+                current = (float(controls_input[line,1]))/300.0
+                '''
+                Take float, "pack" into bytes (represented using strings). Takes each byte string and converts to an integer that is
+                stored in highBytes
+                '''
+                
+                msg[0] = (controls_input[line,0] & 0xFF)
+                msg[1] = (controls_input[line,0] & 0xFF00) >> 8
+                msg[2] = (controls_input[line,0] & 0xFF0000) >> 16
+                msg[3] = (controls_input[line,0] & 0xFF000000) >> 24
+                
+                print "msg[0]: " + repr(msg[0])
+                print "msg[1]: " + repr(msg[1])
+                print "msg[2]: " + repr(msg[2])
+                print "msg[3]: " + repr(msg[3])                
+                
+                highBytes = [ord(byte) for byte in struct.pack('!f', current)]
+                msg[4] = highBytes[3]
+                msg[5] = highBytes[2]
+                msg[6] = highBytes[1]
+                msg[7] = highBytes[0]                
+                
+                print "msg[4]: " + repr(msg[4])
+                print "msg[5]: " + repr(msg[5])
+                print "msg[6]: " + repr(msg[6])
+                print "msg[7]: " + repr(msg[7])
                 
                 try:
-                    '''
-                    id, msg, dlc, flg, time = ch1.read()
-                    print "%9d  %9d  0x%02x  %d  %s" % (id, time, flg, dlc, msg)
-                    for i in range(dlc):
-                        msg[i] = (msg[i]+1) % 256
-                    ch1.write(id, msg, flg)
-                    '''
+                    
                     for i in range(100 * 5):
                         time.sleep(0.01)
-                except:
+                        stat = canWrite(c_int(hnd1), 401, pointer(msg), c_int(8), c_int(0))
+                        
+                    
+                except KeyboardInterrupt:
                     try:
                         print "COMMANDING ZERO TORQUE + ZERO SPEED"
-                        stat = canWrite(c_int(hnd1), c_int(0), pointer(msg), c_int(2), c_int(0))
-                        KillSwitch = True
-                    except KeyboardInterrupt:
-                        pass
+                        index = 0
+                        while index < 8:
+                            msg[index] = 0
+                            index += 1
+                        stat = canWrite(c_int(hnd1), 0x401, pointer(msg), c_int(8), c_int(0))
+                        raw_input("Please hit enter to continue the test ...")
+                    except:
+                        index = 0
+                        while index < 8:
+                            msg[index] = 0
+                        stat = canWrite(c_int(hnd1), 0x401, pointer(msg), c_int(8), c_int(0))
     
             elif test < controls_input[line,2]:
                 #Prompt to continue test, increment test variable
@@ -114,8 +145,6 @@ def run_drive_controls(control_file):
                 while char != '':
                     char = raw_input("Hit the enter key to continue to the next test")
                 test += 1
-            if KillSwitch:
-                break
                 
             line += 1
     except None:
