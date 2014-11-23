@@ -72,37 +72,31 @@ def run_drive_controls(control_file):
     test = (int)(raw_input("Enter the test # to start on (bypasses all tests before input): "))    
     
     controls_input = np.loadtxt(control_file, dtype="int", delimiter=',', skiprows=1)
-    print controls_input
 
-    if test > controls_input[-1,2]:
+    if test > controls_input[-1,3]:
         print "Error! Test input does not exist in the drive controls file"
         return
     
     line = 0
-    print controls_input[line,2]
+    index = 0
     
     try:
-        while line < len(controls_input[:,2]):
-            if test == controls_input[line,2]:
+        while line < len(controls_input[:,3]):
+            if test == controls_input[line,3]:
                 #Continue performing current test
-                print "RPM is ", controls_input[line,0]
-                print "Torque is ", controls_input[line,1]
+                print "RPM is ", controls_input[line,1]
+                print "Torque is ", controls_input[line,2]
 
-                current = (float(controls_input[line,1]))/300.0
+                current = (float(controls_input[line,2]))/300.0
                 '''
                 Take float, "pack" into bytes (represented using strings). Takes each byte string and converts to an integer that is
                 stored in highBytes
                 '''
                 
-                msg[0] = (controls_input[line,0] & 0xFF)
-                msg[1] = (controls_input[line,0] & 0xFF00) >> 8
-                msg[2] = (controls_input[line,0] & 0xFF0000) >> 16
-                msg[3] = (controls_input[line,0] & 0xFF000000) >> 24
-                
-                print "msg[0]: " + repr(msg[0])
-                print "msg[1]: " + repr(msg[1])
-                print "msg[2]: " + repr(msg[2])
-                print "msg[3]: " + repr(msg[3])                
+                msg[0] = (controls_input[line,1] & 0xFF)
+                msg[1] = (controls_input[line,1] & 0xFF00) >> 8
+                msg[2] = (controls_input[line,1] & 0xFF0000) >> 16
+                msg[3] = (controls_input[line,1] & 0xFF000000) >> 24
                 
                 highBytes = [ord(byte) for byte in struct.pack('!f', current)]
                 msg[4] = highBytes[3]
@@ -110,14 +104,9 @@ def run_drive_controls(control_file):
                 msg[6] = highBytes[1]
                 msg[7] = highBytes[0]                
                 
-                print "msg[4]: " + repr(msg[4])
-                print "msg[5]: " + repr(msg[5])
-                print "msg[6]: " + repr(msg[6])
-                print "msg[7]: " + repr(msg[7])
-                
                 try:
                     
-                    for i in range(100 * 5):
+                    for i in range(100 * controls_input[line,0]):
                         time.sleep(0.01)
                         stat = canWrite(c_int(hnd1), 401, pointer(msg), c_int(8), c_int(0))
                         
@@ -137,18 +126,25 @@ def run_drive_controls(control_file):
                             msg[index] = 0
                         stat = canWrite(c_int(hnd1), 0x401, pointer(msg), c_int(8), c_int(0))
     
-            elif test < controls_input[line,2]:
+            elif test < controls_input[line,3]:
                 #Prompt to continue test, increment test variable
                 char = 'temp'
                 
-                print "Please set the dyno to ", controls_input[line,0], "\n"
+                print "Please set the dyno to ", controls_input[line,1], "\n"
                 while char != '':
                     char = raw_input("Hit the enter key to continue to the next test")
                 test += 1
+                line -= 1
                 
             line += 1
     except None:
         pass
+    
+    # Command 0 current and 0 RPM before exiting from the bus.
+    while index < 8:
+        msg[index] = 0
+        index += 1
+    stat = canWrite(c_int(hnd1), 0x401, pointer(msg), c_int(8), c_int(0))
     # Some cleanup, which would be done automatically when the DLL unloads.
     stat = canBusOff(c_int(hnd1))
     
